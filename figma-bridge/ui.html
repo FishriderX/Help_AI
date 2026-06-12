@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <style>
+    body { font-family: sans-serif; padding: 16px; font-size: 13px; background: #1a1a2e; color: #e0e0e0; }
+    .status { margin: 8px 0; padding: 8px; border-radius: 4px; background: #0f3460; }
+    .status.error { background: #4a0e0e; }
+    .status.success { background: #0e4a1e; }
+    input { width: 100%; padding: 6px 8px; margin: 4px 0 8px; background: #0f3460; border: 1px solid #1a5276; border-radius: 4px; color: #fff; box-sizing: border-box; }
+    label { font-size: 11px; color: #aaa; }
+    button { width: 100%; padding: 8px; background: #f0c040; color: #1a1a2e; border: none; border-radius: 4px; font-weight: bold; cursor: pointer; margin-top: 4px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+  <div style="font-size:14px;font-weight:bold;color:#f0c040;margin-bottom:12px;">AutoHelp 4.0 Bridge</div>
+
+  <label>Backend URL</label>
+  <input id="backendUrl" value="http://localhost:3001" />
+
+  <label>API Key</label>
+  <input id="apiKey" type="password" value="dev-key-12345" />
+
+  <button id="btnConnect" onclick="togglePolling()">▶ Start Polling</button>
+
+  <div id="statusBox" class="status">Not connected</div>
+
+  <script>
+    let polling = false;
+    let pollTimer = null;
+
+    function getConfig() {
+      return {
+        backendUrl: document.getElementById('backendUrl').value.trim().replace(/\/$/, ''),
+        apiKey: document.getElementById('apiKey').value.trim(),
+      };
+    }
+
+    function setStatus(msg, type = '') {
+      const box = document.getElementById('statusBox');
+      box.textContent = msg;
+      box.className = 'status' + (type ? ' ' + type : '');
+    }
+
+    function togglePolling() {
+      polling = !polling;
+      document.getElementById('btnConnect').textContent = polling ? '⏹ Stop Polling' : '▶ Start Polling';
+      if (polling) {
+        setStatus('Polling for jobs...');
+        pollOnce();
+      } else {
+        clearTimeout(pollTimer);
+        setStatus('Stopped');
+      }
+    }
+
+    async function pollOnce() {
+      if (!polling) return;
+      const { backendUrl, apiKey } = getConfig();
+      try {
+        const res = await fetch(`${backendUrl}/api/v1/bridge/pending`, {
+          headers: { 'x-api-key': apiKey }
+        });
+        if (res.status === 404) {
+          setStatus('No pending jobs — waiting...');
+        } else if (res.ok) {
+          const job = await res.json();
+          setStatus(`Job found: ${job.job_id} — fetching assets...`);
+          await processJob(job, backendUrl, apiKey);
+        } else {
+          setStatus(`Error: HTTP ${res.status}`, 'error');
+        }
+      } catch (e) {
+        setStatus(`Connection error: ${e.message}`, 'error');
+      }
+      pollTimer = setTimeout(pollOnce, 3000);
+    }
+
+    async function processJob(job, backendUrl, apiKey) {
+      const { plan } = job;
+
+      // Download all asset images as Uint8Array
+      const assetData = {};
+      if (plan.assets) {
+        for (const [name, asset] of Object.entries(plan.assets)) {
+          try {
+            const url = asset.transparent_url || asset.original_url;
+            if (url) {
+              const imgRes = await fetch(url);
+              const blob = await imgRes.blob();
+              const bytes = await blobToUint8Array(blob);
+              assetData[name] = bytes;
+            }
+          } catch (e) {
+            console.warn(`Failed to fetch asset ${name}:`, e.message);
+          }
+        }
+      }
+
+      parent.postMessage({
+        pluginMessage: {
+          type: 'RENDER_PLAN',
+          plan,
+          assetData,
+          jobId: job.job_id,
+          backendUrl,
+          apiKey,
+        }
+      }, '*');
+    }
+
+    async function blobToUint8Array(blob) {
+      const arrayBuffer = await blob.arrayBuffer();
+      return new Uint8Array(arrayBuffer);
+    }
+
+    window.onmessage = (event) => {
+      const msg = event.data && event.data.pluginMessage;
+      if (!msg) return;
+      if (msg.type === 'RENDER_COMPLETE') {
+        setStatus(`✅ Job ${msg.jobId} complete!`, 'success');
+        const { backendUrl, apiKey } = getConfig();
+        fetch(`${backendUrl}/api/v1/bridge/complete`, {
+          method: 'POST',
+          headers: { 'x-api-key': apiKey, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ job_id: msg.jobId, status: 'complete' })
+        }).catch(() => {});
+      }
+      if (msg.type === 'RENDER_ERROR') {
+        setStatus(`❌ Error: ${msg.error}`, 'error');
+      }
+    };
+  </script>
+</body>
+</html>

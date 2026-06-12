@@ -1,0 +1,25 @@
+{
+  "name": "autohelp4-backend",
+  "version": "1.0.0",
+  "description": "AutoHelp 4.0 Backend API Service",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "test": "node --experimental-vm-modules node_modules/jest-cli/bin/jest.js --runInBand",
+    "test:watch": "node --experimental-vm-modules node_modules/jest-cli/bin/jest.js --watch"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.54.0",
+    "cors": "^2.8.5",
+    "express": "^4.21.0",
+    "multer": "^1.4.5-lts.1",
+    "node-fetch": "^3.3.2",
+    "uuid": "^11.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "supertest": "^7.0.0"
+  },
+  "type": "module"
+}

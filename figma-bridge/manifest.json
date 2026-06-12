@@ -1,0 +1,13 @@
+{
+  "name": "AutoHelp 4.0 Bridge",
+  "id": "autohelp4-bridge",
+  "api": "1.0.0",
+  "main": "code.js",
+  "ui": "ui.html",
+  "editorType": ["figma"],
+  "networkAccess": {
+    "allowedDomains": ["none"],
+    "devAllowedDomains": ["*"],
+    "reasoning": "Fetches generated layout plans and asset images from the AutoHelp backend (local or any future server; dev mode allows any host so the backend URL can be switched in the plugin UI without re-importing)."
+  }
+}
